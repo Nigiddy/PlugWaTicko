@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html>
+<head>
+	<title>Event Ticket</title>
+	<style type="text/css">
+		body {
+			font-family: 'Helvetica Neue', sans-serif;
+			background-color: #F5F5F5;
+			color: #333;
+			font-size: 14px;
+			line-height: 1.6;
+			margin: 0;
+			padding: 0;
+			
+		}
+
+		.ticket {
+			position: relative;
+			width: 480px;
+			height: 250px;
+			margin: 30px auto;
+			background-color: black;
+			border: 1px solid #FF7F50;
+			border-radius: 10px;
+			overflow: hidden;
+			display: flex;
+			flex-direction: row;
+			align-items: center;
+			justify-content: space-between;
+			padding: 20px;
+			box-shadow: 0px 0px 10px rgba(0,0,0,0.1);
+		page-break-after: always;
+		}
+
+		.event-info {
+			display: flex;
+			flex-direction: column;
+			align-items: flex-start;
+			justify-content: top;
+			width: 70%;
+			height: 100%;
+			margin-right: 20px;
+			margin-top: 60px;
+		}
+
+		.event-name {
+			font-size: 26px;
+			font-weight: bold;
+			margin-bottom: 5px;
+			color: #FF7F50;
+			text-transform: uppercase;
+			letter-spacing: 1px;
+			text-shadow: 1px 1px #000;
+		}
+
+		.event-date {
+			font-size: 16px;
+			margin-bottom: 10px;
+			color: grey;
+			text-transform: uppercase;
+			letter-spacing: 1px;
+			text-shadow: 1px 1px #000;
+		}
+
+		.event-location {
+			font-size: 16px;
+			margin-bottom: 20px;
+			color: grey;
+			text-transform: uppercase;
+			letter-spacing: 1px;
+			text-shadow: 1px 1px #000;
+		}
+
+		.qr-code {
+			position: absolute;
+			bottom: 20px;
+			right: 20px;
+			width: 90px;
+			height: 90px;
+			background-color: #FFF;
+			border: 2px solid #000;
+			border-radius: 5px;
+			overflow: hidden;
+		}
+
+		.qr-code img {
+			width: 100%;
+			height: 100%;
+			object-fit: cover;
+			object-position: center;
+		}
+
+		.vip-label {
+			position: absolute;
+			top: 10px;
+			right: 8px;
+			background-color: #FF7F50;
+			color: #333;
+			font-size: 16px;
+			padding: 5px 25px;
+			border-radius: 5px;
+			text-transform: uppercase;
+			font-weight: bold;
+			letter-spacing: 1px;
+			box-shadow: 0px 0px 10px rgba(0,0,0,0.1);
+		}
+	</style>
+</head>
+<body>
+	{% if data == None %}
+		<div class="ticket">
+					<div class="vip-label">{{ label }}</div>
+							<div class="event-info">
+										<div class="event-name">{{ event }}</div>
+													<div class="event-date">{{ address }}</div>
+																<div class="event-location">{{ date }}</div>
+																			
+																						</div>
+																									<div class="qr-code"><img src="data:image/png;base64, {{ qrcode }} "></div>
+																									</div>
+	{% else %}
+{% for ticket in data %}
+	<div class="ticket">
+		<div class="vip-label">{{ ticket.label }}</div>
+		<div class="event-info">
+			<div class="event-name">{{ ticket.event }}</div>
+			<div class="event-date">{{ ticket.address }}</div>
+			<div class="event-location">{{ ticket.date }}</div>
+			
+			</div>
+			<div class="qr-code"><img src="data:image/png;base64, {{ ticket.qrcode }} "></div>
+</div>
+{% endfor %}
+{% endif %}
+		</body>
+<script>var eventName = document.getElementById("event-name");
+var eventNameLength = eventName.innerHTML.length;
+
+// adjust font size based on length of event name
+if (eventNameLength > 21) {
+  eventName.style.fontSize = "19px";
+  } else if (eventNameLength > 18) {
+    eventName.style.fontSize = "21px";
+	} else {
+	  eventName.style.fontSize = "26px";
+	  }
+	  </script>
+</html>
