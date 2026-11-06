@@ -1,5 +1,29 @@
+import json
+import ast
 from rest_framework import serializers, status
 from .models import Category, Event, TicketPrice, TrendingEvents
+
+def safe_parse_list(val):
+    if isinstance(val, list):
+        return val
+    if not val:
+        return []
+    if isinstance(val, str):
+        val = val.strip()
+        try:
+            parsed = json.loads(val)
+            if isinstance(parsed, list):
+                return parsed
+        except (json.JSONDecodeError, TypeError, ValueError):
+            pass
+        try:
+            parsed = ast.literal_eval(val)
+            if isinstance(parsed, list):
+                return parsed
+        except (ValueError, SyntaxError):
+            pass
+        return [val] if val else []
+    return []
 
 class CreateEventPriceSerializer(serializers.ModelSerializer):
     id= serializers.IntegerField(read_only=True) 
@@ -37,11 +61,8 @@ class EventCreateSerializer(serializers.ModelSerializer):
         fields=['id', 'user','name','category','tags','country','state','address', 'city', 'image', 'description', 'start_date', 'end_date', 'approved','tickets',]
 
     def to_representation(self, instance):
-        res= super().to_representation(instance)
-        try:
-            res['tags']= eval(instance.tags)
-        except:
-            res['tags'] = instance.tags
+        res = super().to_representation(instance)
+        res['tags'] = safe_parse_list(instance.tags)
         return res
     def validate(self, attrs):
         if attrs['start_date'] > attrs['end_date']:

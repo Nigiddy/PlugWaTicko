@@ -65,10 +65,12 @@ class RemoveTicketView(APIView):
         try:
             ticket=TicketPrice.objects.get(id=pk)
             order=OrderTicket.objects.get(user=self.request.user, status= "not completed", event=ticket.event)
-            BuyTicket.objects.delete(id=pk, completed=False, order=order)
-            return Response({"message": "success"}, status=status.HTTP_204_NO_CONTENT)
-        except:
-            return Response({"message":"ticket dosent exists or ticket not added"}, status=status.HTTP_400_BAD_REQUEST)
+            deleted_count, _ = BuyTicket.objects.filter(event_ticket=ticket, completed=False, order=order).delete()
+            if deleted_count > 0:
+                return Response({"message": "success"}, status=status.HTTP_204_NO_CONTENT)
+            return Response({"message":"ticket doesn't exist or ticket not added"}, status=status.HTTP_400_BAD_REQUEST)
+        except Exception:
+            return Response({"message":"ticket doesn't exist or ticket not added"}, status=status.HTTP_400_BAD_REQUEST)
         
 class BuyTicketView(APIView):
 

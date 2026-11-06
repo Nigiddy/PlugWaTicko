@@ -3,6 +3,7 @@
 <h2>Hello Your Ticket has arrived 🎉</h2>
 <h3 style="text-align: center; ">Purchased Ticket🎫</h3>
 <p>Event: {{ event }}</p>
+{% if ticket_number %}<p>Ticket Number: <b>{{ ticket_number }}</b></p>{% endif %}
 <p> Address: {{ address }}</p>
 <p>Date: {{ date }}</p>
 <br>

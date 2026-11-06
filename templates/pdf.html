@@ -109,29 +109,29 @@
 <body>
 	{% if data == None %}
 		<div class="ticket">
-					<div class="vip-label">{{ label }}</div>
-							<div class="event-info">
-										<div class="event-name">{{ event }}</div>
-													<div class="event-date">{{ address }}</div>
-																<div class="event-location">{{ date }}</div>
-																			
-																						</div>
-																									<div class="qr-code"><img src="data:image/png;base64, {{ qrcode }} "></div>
-																									</div>
+			<div class="vip-label">{{ label }}</div>
+			<div class="event-info">
+				<div class="event-name">{{ event }}</div>
+				{% if ticket_number %}<div style="color: #FF7F50; font-size: 11px; letter-spacing: 1px; margin-bottom: 5px;">{{ ticket_number }}</div>{% endif %}
+				<div class="event-date">{{ address }}</div>
+				<div class="event-location">{{ date }}</div>
+			</div>
+			<div class="qr-code"><img src="data:image/png;base64, {{ qrcode }} "></div>
+		</div>
 	{% else %}
 {% for ticket in data %}
 	<div class="ticket">
 		<div class="vip-label">{{ ticket.label }}</div>
 		<div class="event-info">
 			<div class="event-name">{{ ticket.event }}</div>
+			{% if ticket.ticket_number %}<div style="color: #FF7F50; font-size: 11px; letter-spacing: 1px; margin-bottom: 5px;">{{ ticket.ticket_number }}</div>{% endif %}
 			<div class="event-date">{{ ticket.address }}</div>
 			<div class="event-location">{{ ticket.date }}</div>
-			
-			</div>
-			<div class="qr-code"><img src="data:image/png;base64, {{ ticket.qrcode }} "></div>
-</div>
+		</div>
+		<div class="qr-code"><img src="data:image/png;base64, {{ ticket.qrcode }} "></div>
+	</div>
 {% endfor %}
-{% endif %}
+	{% endif %}
 		</body>
 <script>var eventName = document.getElementById("event-name");
 var eventNameLength = eventName.innerHTML.length;
