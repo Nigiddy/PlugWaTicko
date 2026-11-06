@@ -6,10 +6,12 @@ import io
 import qrcode
 import base64
 import logging
+import requests
 from django.urls import reverse
-from django.db import transaction
+from django.db import transaction, models
 from django.db.models import F
-from Events.models import OrderTicket
+from django.utils import timezone
+from Events.models import OrderTicket, TicketPrice, OrderStatus
 from Transactions.models import Payment, SoldTicket, TicketStatus
 from Users.models import User
 from django.conf import settings
@@ -185,24 +187,83 @@ def create_ticket(email, user_id, bought_ticket_id, payment_id):
 def create_payment_record(bought_ticket_id, amount, user_id, email, paystack_ref=None):
     """
     Generate payment record and dispatch ticket generation.
-    Protected by database transaction.
+    Handles inventory transition from RESERVED to sold, and manages late-payment edge cases.
+    Protected by atomic database transaction.
     """
     ref_code = paystack_ref or generate_ref_code()
     try:
         user = User.objects.get(id=user_id)
         with transaction.atomic():
-            bought_ticket = OrderTicket.objects.get(id=bought_ticket_id, status='not completed')
+            bought_ticket = OrderTicket.objects.select_for_update().get(id=bought_ticket_id)
+
+            if bought_ticket.status in ['completed', OrderStatus.COMPLETED]:
+                logger.info(f"Order {bought_ticket_id} already marked completed. Skipping.")
+                return
+
+            # LATE-PAYMENT EDGE CASE HANDLING:
+            if bought_ticket.status == OrderStatus.EXPIRED:
+                logger.warning(f"Payment received for EXPIRED order {bought_ticket_id}. Checking for inventory re-allocation.")
+                can_fulfill = True
+                for buy_ticket in bought_ticket.tickets.all():
+                    tier = TicketPrice.objects.select_for_update().get(id=buy_ticket.event_ticket_id)
+                    if tier.get_tickets_available() < buy_ticket.qty:
+                        can_fulfill = False
+                        break
+
+                if not can_fulfill:
+                    logger.error(f"Cannot fulfill late payment for order {bought_ticket_id}: inventory sold out. Triggering refund.")
+                    bought_ticket.status = OrderStatus.CANCELLED
+                    bought_ticket.save(update_fields=['status'])
+
+                    # Auto-refund via Paystack if possible
+                    if paystack_ref and getattr(settings, 'PAYSTACK_SECRET_KEY', None):
+                        try:
+                            refund_url = 'https://api.paystack.co/refund'
+                            headers = {'authorization': f'Bearer {settings.PAYSTACK_SECRET_KEY}'}
+                            refund_resp = requests.post(
+                                refund_url,
+                                timeout=30,
+                                headers=headers,
+                                json={'transaction': paystack_ref, 'amount': int(amount * 100), 'merchant_note': 'Order reservation expired and inventory sold out.'}
+                            )
+                            logger.info(f"Paystack refund initiated for order {bought_ticket_id}: {refund_resp.status_code}")
+                        except Exception as refund_err:
+                            logger.error(f"Failed to auto-refund order {bought_ticket_id}: {refund_err}")
+
+                    subject = '[TicketPlug] Order Expired - Payment Refunded'
+                    msg_body = f"Hello,\n\nWe received payment for your order, but your 15-minute reservation had expired and the event was sold out.\n\nA refund of NGN {amount} has been initiated to your original payment method.\n\nTicketPlug Team"
+                    msg = EmailMultiAlternatives(subject, msg_body, settings.EMAIL_HOST_USER, [email])
+                    msg.send()
+                    return
+
+                # If inventory is available, re-allocate directly to sold
+                for buy_ticket in bought_ticket.tickets.all():
+                    tier = TicketPrice.objects.select_for_update().get(id=buy_ticket.event_ticket_id)
+                    tier.sold = F('sold') + buy_ticket.qty
+                    tier.save()
+                    buy_ticket.completed = True
+                    buy_ticket.save()
+
+            else:
+                # Normal reservation path (RESERVED or 'not completed')
+                # Atomically decrement reserved and increment sold
+                for buy_ticket in bought_ticket.tickets.all():
+                    tier = TicketPrice.objects.select_for_update().get(id=buy_ticket.event_ticket_id)
+                    tier.reserved = models.Case(
+                        models.When(reserved__gte=buy_ticket.qty, then=models.F('reserved') - buy_ticket.qty),
+                        default=0
+                    )
+                    tier.sold = F('sold') + buy_ticket.qty
+                    tier.save()
+                    buy_ticket.completed = True
+                    buy_ticket.save()
+
             payment, _ = Payment.objects.get_or_create(
                 ticket=bought_ticket,
                 defaults={'user': user, 'amount': amount, 'payment_id': ref_code}
             )
             bought_ticket.status = 'completed'
-            for buy_ticket in bought_ticket.tickets.all():
-                buy_ticket.event_ticket.sold = F('sold') + buy_ticket.qty
-                buy_ticket.event_ticket.save()
-                buy_ticket.completed = True
-                buy_ticket.save()
-            bought_ticket.save()
+            bought_ticket.save(update_fields=['status'])
 
         create_ticket(email=email, bought_ticket_id=bought_ticket_id, payment_id=payment.id, user_id=user_id)
     except Exception as e:
@@ -210,14 +271,52 @@ def create_payment_record(bought_ticket_id, amount, user_id, email, paystack_ref
 
 
 @shared_task
+def release_expired_ticket_reservations():
+    """
+    Periodic task (run every 60s by Celery Beat).
+    Finds all orders in RESERVED status whose 15-minute window has passed.
+    Atomically restores reserved inventory to available stock and marks orders EXPIRED.
+    """
+    now = timezone.now()
+    with transaction.atomic():
+        expired_orders = OrderTicket.objects.select_for_update(skip_locked=True).filter(
+            status=OrderStatus.RESERVED,
+            reservation_expires_at__lt=now
+        )
+        for order in expired_orders:
+            for buy_ticket in order.tickets.filter(completed=False):
+                if buy_ticket.event_ticket:
+                    TicketPrice.objects.filter(id=buy_ticket.event_ticket_id).update(
+                        reserved=models.Case(
+                            models.When(reserved__gte=buy_ticket.qty, then=models.F('reserved') - buy_ticket.qty),
+                            default=0
+                        )
+                    )
+            order.status = OrderStatus.EXPIRED
+            order.save(update_fields=['status'])
+            logger.info(f"Released expired reservation for order {order.id}")
+
+
+@shared_task
 def payment_failed(bought_ticket_id, amount, user_id, email):
     """
-    Cleans up pending tickets if payment fails.
+    Cleans up pending tickets and releases reserved inventory if payment fails.
     """
     try:
-        order = OrderTicket.objects.filter(id=bought_ticket_id, status='not completed').first()
-        if order:
-            order.tickets.all().delete()
+        with transaction.atomic():
+            order = OrderTicket.objects.filter(id=bought_ticket_id).exclude(status__in=['completed', OrderStatus.COMPLETED]).first()
+            if order:
+                for buy_ticket in order.tickets.filter(completed=False):
+                    if buy_ticket.event_ticket:
+                        TicketPrice.objects.filter(id=buy_ticket.event_ticket_id).update(
+                            reserved=models.Case(
+                                models.When(reserved__gte=buy_ticket.qty, then=models.F('reserved') - buy_ticket.qty),
+                                default=0
+                            )
+                        )
+                order.tickets.all().delete()
+                order.status = OrderStatus.CANCELLED
+                order.save(update_fields=['status'])
     except Exception as e:
         logger.error(f"Error handling failed payment for order {bought_ticket_id}: {e}", exc_info=True)
 

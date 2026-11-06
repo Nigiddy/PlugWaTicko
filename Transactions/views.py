@@ -9,7 +9,7 @@ from rest_framework import generics, status, permissions
 from rest_framework.views import APIView
 from rest_framework.response import Response
 
-from Events.models import OrderTicket
+from Events.models import OrderTicket, OrderStatus
 from .models import SoldTicket, Payment, CheckInLog, TicketStatus, CheckInResult
 from .serializers import PaymentSErializer, CheckoutSerializer
 from .tasks import create_payment_record, payment_failed
@@ -28,23 +28,27 @@ class Makepayment(APIView):
         user=self.request.user
         id= self.kwargs["pk"]
         try:
-          order=OrderTicket.objects.get(id=id, user=user, status='not completed')
-          return Response(CheckoutSerializer(order).data)
-
-        except:
-             return Response({"error":" invalid id or you dont have any tickets for this event"}, status=status.HTTP_400_BAD_REQUEST)
+            order=OrderTicket.objects.get(id=id, user=user, status__in=['not completed', OrderStatus.RESERVED])
+            if order.is_expired():
+                return Response({"error": "Order reservation has expired. Please select your tickets again."}, status=status.HTTP_400_BAD_REQUEST)
+            return Response(CheckoutSerializer(order).data)
+        except Exception:
+            return Response({"error":" invalid id or you dont have any tickets for this event"}, status=status.HTTP_400_BAD_REQUEST)
 
     def post(self, *args, **kwargs):
         serializer=self.serializer_class(data=self.request.data)
         pk=self.kwargs['pk']
-        order=OrderTicket.objects.filter(user=self.request.user, id=pk, status='not completed')
-        if order.exists():
+        order=OrderTicket.objects.filter(user=self.request.user, id=pk, status__in=['not completed', OrderStatus.RESERVED]).first()
+        if order:
+            if order.is_expired():
+                return Response({"error": "Order reservation has expired. Please select your tickets again."}, status=status.HTTP_400_BAD_REQUEST)
+
             if serializer.is_valid(raise_exception=True):
-                order=order.last()
                 price=order.get_total_price()
-                user_id=str(self.request.user.id)
+                user=self.request.user
+                user_id=str(user.id)
                 email=serializer.validated_data.get('email')
-                user_email=str(self.request.user.email)
+                user_email=str(user.email)
                 if price == 0:
                      create_payment_record.delay(amount=price, email=email, user_id=user_id, bought_ticket_id=pk)
                      return Response({"message" :"checkout successful, check your email to find your tickets"}) 
@@ -52,7 +56,6 @@ class Makepayment(APIView):
                   url='https://api.paystack.co/transaction/initialize'
                   header={'authorization': f'Bearer {settings.PAYSTACK_SECRET_KEY}'}
                   try:
-                    user=self.request.user
                     resp=requests.post(url, timeout=100, headers=header, json={'amount':price*100, 'email':user_email, 'metadata':{'user_id':str(user.id), 'bought_ticket_id':str(pk), 'price':price,'email':email, },})
                     return Response(resp.json())
                   except Exception as e:

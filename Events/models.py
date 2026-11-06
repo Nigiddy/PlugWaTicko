@@ -1,8 +1,16 @@
 from django.db import models
+from django.utils import timezone
 from cloudinary.models import CloudinaryField
 from Users.models import User
 import uuid
 from django.core.exceptions import ValidationError
+
+class OrderStatus(models.TextChoices):
+    PENDING = 'not completed', 'Pending'
+    RESERVED = 'RESERVED', 'Inventory Reserved'
+    COMPLETED = 'completed', 'Completed'
+    EXPIRED = 'EXPIRED', 'Reservation Expired'
+    CANCELLED = 'CANCELLED', 'Order Cancelled'
 
 class Category(models.Model):
     name=models.CharField(max_length=50, unique=True, primary_key=True)
@@ -31,7 +39,7 @@ class Event(models.Model):
     city=models.CharField(max_length=300)
     state=models.CharField(max_length=300)
     address=models.CharField(max_length=400)
-    tags=models.CharField(max_length=500,default=[] ,blank=True)
+    tags=models.JSONField(default=list, blank=True)
     description=models.TextField()
     image=CloudinaryField('images', null=True, blank=True)
     approved=models.BooleanField(default=False)
@@ -62,8 +70,24 @@ class TicketPrice(models.Model):
     description=models.TextField()
     is_free=models.BooleanField(default=False)
     sold=models.PositiveIntegerField(default=0)
+    reserved=models.PositiveIntegerField(default=0)
     qty=models.PositiveIntegerField(default=0)
 
+    class Meta:
+        constraints = [
+            models.CheckConstraint(
+                check=models.Q(sold__lte=models.F('qty')),
+                name='ticketprice_sold_lte_qty'
+            ),
+            models.CheckConstraint(
+                check=models.Q(sold + models.F('reserved') <= models.F('qty')),
+                name='ticketprice_sold_plus_reserved_lte_qty'
+            ),
+            models.CheckConstraint(
+                check=models.Q(reserved__gte=0),
+                name='ticketprice_reserved_gte_zero'
+            ),
+        ]
 
     def save(self, *args, **kwargs):
         if self.is_free:
@@ -72,7 +96,7 @@ class TicketPrice(models.Model):
 
     
     def get_tickets_available(self):
-        return self.qty - self.sold
+        return max(0, self.qty - self.sold - self.reserved)
 
     def __str__(self)->str:
         return f"{self.event} ({self.label})"
@@ -83,7 +107,7 @@ class BuyTicket(models.Model):
     user=models.ForeignKey(User, on_delete=models.CASCADE, related_name='user_tickets', null=True)
     event_ticket=models.ForeignKey(TicketPrice, on_delete=models.SET_NULL, null=True)
     qty=models.PositiveIntegerField(default=1)
-    emails=models.CharField(max_length=9000, blank=True, null=True)
+    emails=models.JSONField(default=list, blank=True)
     order=models.ForeignKey('OrderTicket', on_delete=models.CASCADE, related_name='tickets')
     date=models.DateTimeField(auto_now_add=True)
     completed=models.BooleanField(default=False)
@@ -97,21 +121,25 @@ class BuyTicket(models.Model):
 
 
 class OrderTicket(models.Model):
-    Order_Status=[ 
-    ('completed', 'completed'),
-    ('not completed', 'not completed')]
-
     id=models.UUIDField(default=uuid.uuid4,editable=False, primary_key=True )
     event=models.ForeignKey(Event, on_delete=models.SET_NULL, null=True, related_name='event_orders')
     user=models.ForeignKey(User, on_delete=models.CASCADE, related_name='user_orders', null=True)
-    status=models.CharField(choices=Order_Status, max_length=20, default='not completed')
+    status=models.CharField(choices=OrderStatus.choices, max_length=20, default=OrderStatus.PENDING, db_index=True)
+    reservation_expires_at=models.DateTimeField(null=True, blank=True, db_index=True)
+    paystack_reference=models.CharField(max_length=100, unique=True, null=True, blank=True, db_index=True)
     date=models.DateTimeField(auto_now_add=True)
 
     class Meta:
         ordering=['-date']
+        indexes = [
+            models.Index(fields=['status', 'reservation_expires_at']),
+        ]
     
     def __str__(self):
         return str(self.user)
+
+    def is_expired(self):
+        return bool(self.reservation_expires_at and timezone.now() > self.reservation_expires_at)
 
     def get_total_price(self):
         total=0
