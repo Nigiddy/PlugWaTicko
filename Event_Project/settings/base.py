@@ -42,7 +42,7 @@ INSTALLED_APPS = [
     'cloudinary',
     'Users.apps.UsersConfig',
     'Events.apps.EventsConfig',
-    'Admin.apps.AdminConfig',
+    'ADMIN.apps.AdminConfig',
     'Transactions.apps.TransactionsConfig',
 ]
 

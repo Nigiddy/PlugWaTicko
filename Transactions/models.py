@@ -60,9 +60,9 @@ class SoldTicket(models.Model):
 
     class Meta:
         indexes = [
-            models.Index(fields=['ticket', 'status']),
-            models.Index(fields=['qr_code_token', 'status']),
-            models.Index(fields=['ticket_number']),
+            models.Index(fields=['ticket', 'status'], name='soldtkt_tkt_status_idx'),
+            models.Index(fields=['qr_code_token', 'status'], name='soldtkt_qr_status_idx'),
+            models.Index(fields=['ticket_number'], name='soldtkt_number_idx'),
         ]
 
     def __str__(self):
@@ -84,8 +84,8 @@ class CheckInLog(models.Model):
     class Meta:
         ordering=['-scanned_at']
         indexes = [
-            models.Index(fields=['event', 'scanned_at']),
-            models.Index(fields=['ticket', 'result']),
+            models.Index(fields=['event', 'scanned_at'], name='checkin_evt_scan_idx'),
+            models.Index(fields=['ticket', 'result'], name='checkin_tkt_res_idx'),
         ]
 
     def __str__(self):

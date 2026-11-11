@@ -80,7 +80,7 @@ class TicketPrice(models.Model):
                 name='ticketprice_sold_lte_qty'
             ),
             models.CheckConstraint(
-                check=models.Q(sold + models.F('reserved') <= models.F('qty')),
+                check=models.Q(sold__lte=models.F('qty') - models.F('reserved')),
                 name='ticketprice_sold_plus_reserved_lte_qty'
             ),
             models.CheckConstraint(
@@ -132,7 +132,7 @@ class OrderTicket(models.Model):
     class Meta:
         ordering=['-date']
         indexes = [
-            models.Index(fields=['status', 'reservation_expires_at']),
+            models.Index(fields=['status', 'reservation_expires_at'], name='ordertkt_stat_exp_idx'),
         ]
     
     def __str__(self):

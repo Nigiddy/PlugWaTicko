@@ -40,7 +40,7 @@ urlpatterns = [
     path('api/v1/', include('Events.urls')),
     path('api/v1/', include('Users.urls')),
     path('api/v1/', include('Transactions.urls')),
-    path('api/v1/admin/', include('Admin.urls')),
+    path('api/v1/admin/', include('ADMIN.urls')),
     path("", schema_view.with_ui('swagger', cache_timeout=0), name='schema-swagger-ui'),
     path("redoc/", schema_view.with_ui('redoc', cache_timeout=0), name='schema-swagger-ui'),
     path('api/v1/', include('dj_rest_auth.urls')),

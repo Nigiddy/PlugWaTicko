@@ -41,7 +41,7 @@ class Migration(migrations.Migration):
         migrations.AddConstraint(
             model_name='ticketprice',
             constraint=models.CheckConstraint(
-                check=models.Q(sold + models.F('reserved') <= models.F('qty')),
+                check=models.Q(sold__lte=models.F('qty') - models.F('reserved')),
                 name='ticketprice_sold_plus_reserved_lte_qty'
             ),
         ),
