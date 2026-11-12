@@ -30,9 +30,9 @@ REST_AUTH['JWT_AUTH_SAMESITE'] = 'Lax'
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.postgresql',
-        'USER': config('POSTGRES_USER'),
-        'NAME': config('POSTGRES_NAME'),
-        'PASSWORD': config('POSTGRES_PASSWORD'),
+        'USER': config('POSTGRES_USER', default='postgres'),
+        'NAME': config('POSTGRES_NAME', default='ticketplug'),
+        'PASSWORD': config('POSTGRES_PASSWORD', default=''),
         'HOST': config('POSTGRES_HOST', default='db'),
         'PORT': config('POSTGRES_PORT', default=5432, cast=int),
     }
@@ -44,8 +44,8 @@ EMAIL_HOST = 'smtp.gmail.com'
 EMAIL_PORT = 587
 EMAIL_USE_TLS = True
 EMAIL_USE_SSL = False
-EMAIL_HOST_USER = config('EMAIL_HOST_USER')
-EMAIL_HOST_PASSWORD = config('EMAIL_HOST_PASSWORD')
+EMAIL_HOST_USER = config('EMAIL_HOST_USER', default='')
+EMAIL_HOST_PASSWORD = config('EMAIL_HOST_PASSWORD', default='')
 
 # Production Structured Logging
 LOGGING = {

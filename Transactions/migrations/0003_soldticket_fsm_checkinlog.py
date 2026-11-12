@@ -50,12 +50,12 @@ class Migration(migrations.Migration):
         migrations.AddField(
             model_name='soldticket',
             name='ticket_number',
-            field=models.CharField(db_index=True, max_length=32, null=True),
+            field=models.CharField(max_length=32, null=True),
         ),
         migrations.AddField(
             model_name='soldticket',
             name='qr_code_token',
-            field=models.CharField(db_index=True, max_length=64, null=True),
+            field=models.CharField(max_length=64, null=True),
         ),
         migrations.AddField(
             model_name='soldticket',
