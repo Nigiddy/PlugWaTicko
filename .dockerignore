@@ -1,0 +1,36 @@
+# Git and repository metadata
+.git
+.gitignore
+
+# Virtual environments
+.venv
+env/
+venv/
+ENV/
+
+# Python bytecode and caches
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Local databases and journals
+db.sqlite3
+db.sqlite3-journal
+
+# Documentation (available on host, not needed in container)
+docs/
+
+# Logs and runtime artifacts
+*.log
+*.pid
+
+# Static and media asset directories (managed inside container or via volume)
+media/
+static/
+
+# Environment files
+.env.local
+
